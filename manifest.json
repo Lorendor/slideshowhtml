@@ -1,0 +1,17 @@
+{
+  "name": "Mala Mare Tours",
+  "short_name": "MalaMare",
+  "display": "fullscreen",
+  "start_url": "/",
+  "background_color": "#06090f",
+  "theme_color": "#06090f",
+  "orientation": "landscape",
+  "icons": [
+    {
+      "src": "images/logo.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
