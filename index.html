@@ -184,6 +184,34 @@ html,body{width:100vw;height:100vh;overflow:hidden;background:#06090f;font-famil
 }
 .fsb:hover{background:rgba(255,255,255,.14);color:#fff}
 
+/* ─── PASSWORD OVERLAY ─── */
+.pw-overlay{
+  display:none;position:fixed;inset:0;z-index:9999;
+  background:rgba(4,8,16,.92);backdrop-filter:blur(20px);
+  flex-direction:column;align-items:center;justify-content:center;gap:20px;
+}
+.pw-overlay.show{display:flex}
+.pw-title{
+  font-family:'Cormorant Garamond',serif;font-size:2rem;font-weight:300;
+  color:#f5f0e8;letter-spacing:.05em;
+}
+.pw-sub{font-size:.7rem;letter-spacing:.25em;color:rgba(255,255,255,.5);text-transform:uppercase}
+.pw-input{
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.2);
+  color:#fff;font-size:1.1rem;letter-spacing:.3em;text-align:center;
+  padding:12px 24px;border-radius:4px;outline:none;width:220px;
+  font-family:'DM Sans',sans-serif;
+}
+.pw-input:focus{border-color:rgba(255,255,255,.45)}
+.pw-err{font-size:.7rem;color:rgba(255,100,100,.8);letter-spacing:.1em;min-height:1em}
+.pw-close{
+  position:absolute;top:24px;right:28px;
+  background:none;border:none;color:rgba(255,255,255,.4);
+  font-size:1.2rem;cursor:pointer;line-height:1;padding:4px 8px;
+  transition:color .2s;
+}
+.pw-close:hover{color:rgba(255,255,255,.85)}
+
 /* ─── SLIDE-IN TEXT ANIM ─── */
 .bot .eyebrow,.bot .dest-title,.bot .dest-sub,
 .comb-bar *,.tr-cnt *,.gl-panel *{
@@ -618,6 +646,14 @@ html,body{width:100vw;height:100vh;overflow:hidden;background:#06090f;font-famil
   </svg>
 </button>
 
+<div class="pw-overlay" id="pwOverlay">
+  <button class="pw-close" onclick="hidePwPrompt()" title="Cancel">✕</button>
+  <div class="pw-sub">Admin access required</div>
+  <div class="pw-title">Enter password to exit</div>
+  <input class="pw-input" id="pwInput" type="password" placeholder="••••••" maxlength="20">
+  <div class="pw-err" id="pwErr"></div>
+</div>
+
 <script>
 const slides=[...document.querySelectorAll('.slide')];
 const dotsEl=document.getElementById('dots');
@@ -661,28 +697,88 @@ let tx=0;
 document.addEventListener('touchstart',e=>tx=e.touches[0].clientX,{passive:true});
 document.addEventListener('touchend',e=>{const d=e.changedTouches[0].clientX-tx;if(Math.abs(d)>40)go(c+(d<0?1:-1));},{passive:true});
 
-// Keyboard
-document.addEventListener('keydown',e=>{
-  if(e.key==='ArrowRight')go(c+1);
-  if(e.key==='ArrowLeft')go(c-1);
-});
-
 tick();
 
-// Fullscreen
+// Keep screen awake
+async function keepAwake(){
+  try{
+    await navigator.wakeLock.request('screen');
+  }catch(e){}
+}
+keepAwake();
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible') keepAwake();
+});
+
+// Fullscreen + password lock
+const ADMIN_PW = 'malamare';
+const pwOverlay = document.getElementById('pwOverlay');
+const pwInput   = document.getElementById('pwInput');
+const pwErr     = document.getElementById('pwErr');
+
 function toggleFS(){
   if(!document.fullscreenElement){
     document.documentElement.requestFullscreen();
   } else {
-    document.exitFullscreen();
+    showPwPrompt();
   }
 }
+
+function showPwPrompt(){
+  pwInput.value='';
+  pwErr.textContent='';
+  pwOverlay.classList.add('show');
+  setTimeout(()=>pwInput.focus(),50);
+}
+
+function hidePwPrompt(){
+  pwOverlay.classList.remove('show');
+  if(unlockedByPassword) return;
+  if(document.fullscreenElement) return;
+  document.documentElement.requestFullscreen();
+}
+
+pwInput.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    if(pwInput.value===ADMIN_PW){
+      unlockedByPassword = true;
+      hidePwPrompt();
+      document.exitFullscreen();
+    } else {
+      pwErr.textContent='Incorrect password';
+      pwInput.value='';
+      pwInput.focus();
+    }
+  }
+  if(e.key==='Escape') e.stopImmediatePropagation();
+});
+
+// Block Escape from exiting fullscreen when in fullscreen
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape' && document.fullscreenElement){
+    e.preventDefault();
+    showPwPrompt();
+  }
+  if(e.key==='ArrowRight' && !pwOverlay.classList.contains('show')) go(c+1);
+  if(e.key==='ArrowLeft'  && !pwOverlay.classList.contains('show')) go(c-1);
+},{capture:true});
+
+let unlockedByPassword = false;
+
 document.addEventListener('fullscreenchange',()=>{
   const icon=document.getElementById('fsicon');
   if(document.fullscreenElement){
+    unlockedByPassword = false;
     icon.innerHTML='<path d="M8 3v3H5M16 3v3h3M8 21v-3H5M16 21v-3h3"/><path d="M3 8h3M21 8h-3M3 16h3M21 16h-3"/>';
   } else {
-    icon.innerHTML='<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>';
+    if(!unlockedByPassword){
+      // Escape or browser forced exit — go back fullscreen immediately
+      document.documentElement.requestFullscreen();
+      showPwPrompt();
+    } else {
+      hidePwPrompt();
+      icon.innerHTML='<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>';
+    }
   }
 });
 </script>
